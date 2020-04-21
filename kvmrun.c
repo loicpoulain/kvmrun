@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
 	struct kvm_userspace_memory_region region = {};
 	struct kvm_run *vcpu_kvm_run;
 	int kvmfd, vmfd, vcpufd, codefd;
-	int ret, offset;
+	int ret, offset = 0;
 	void *memory;
 
 	if (argc != 2) {
@@ -127,17 +127,32 @@ int main(int argc, char *argv[])
 		return -EIO;
 	}
 
-#if defined(__arm__) || defined(__aarch64__)
 	/* Initialize vCPU */
+#if defined(__arm__) || defined(__aarch64__)
 	{
 		struct kvm_vcpu_init vcpu_init;
-		
+
+		/* Initialize registers, target, etc... */
 		ioctl(vmfd, KVM_ARM_PREFERRED_TARGET, &vcpu_init);
 		ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, &vcpu_init);
 		if (ret < 0) {
 			perror("vCPU init error");
 			return -EIO;
 		}
+	}
+#elif defined(__x86_64__)
+	{
+		struct kvm_sregs sregs;
+
+		/* The value of the CS register at reset is FFFF change to 0 */
+		ioctl(vcpufd, KVM_GET_SREGS, &sregs);
+		sregs.cs.base = 0;
+		sregs.cs.selector = 0;
+		ioctl(vcpufd, KVM_SET_SREGS, &sregs);
+
+		/* IP point to start, reset RFLAGS */
+		struct kvm_regs regs = {.rip = 0x0000, .rflags = 0x2 };
+		ioctl(vcpufd, KVM_SET_REGS, &regs);
 	}
 #endif
 
@@ -160,6 +175,11 @@ int main(int argc, char *argv[])
 			       vcpu_kvm_run->mmio.len,
 			       vcpu_kvm_run->mmio.data[0]);
 			break;
+		case KVM_EXIT_INTERNAL_ERROR:
+			return -EIO;
+		case KVM_EXIT_SHUTDOWN:
+		case KVM_EXIT_HLT:
+			return 0;
 		default:
 			break;
 		}

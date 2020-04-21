@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 	void *memory;
 
 	if (argc != 2) {
-		printf("usage: %s <armcode.bin>\n", argv[0]);
+		printf("usage: %s <binary-file>\n", argv[0]);
 		return -EINVAL;
 	}
 
@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 			return -EIO;
 		}
 
+		/* information stored in the shared kvm_run struct */
 		printf("vmexit reason: %s\n",
 		       kvm_exit_reasons[vcpu_kvm_run->exit_reason]);
 

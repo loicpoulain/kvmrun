@@ -44,6 +44,8 @@ static const char *kvm_exit_reasons[] = {
 	"KVM_EXIT_ARM_NISV",
 };
 
+#define CONSOLE_FIFO_ADDR 0x01000000
+
 int main(int argc, char *argv[])
 {
 	struct kvm_userspace_memory_region region = {};
@@ -165,23 +167,28 @@ int main(int argc, char *argv[])
 		}
 
 		/* information stored in the shared kvm_run struct */
-		printf("vmexit reason: %s\n",
-		       kvm_exit_reasons[vcpu_kvm_run->exit_reason]);
+		/*printf("vmexit reason: %s\n",
+		       kvm_exit_reasons[vcpu_kvm_run->exit_reason]);*/
 
 		switch (vcpu_kvm_run->exit_reason) {
-		case KVM_EXIT_MMIO:
-			printf("mmio %s at %x (len=%u, data=%x)\n",
-			       vcpu_kvm_run->mmio.is_write ? "write" : "read",
-			       vcpu_kvm_run->mmio.phys_addr,
-			       vcpu_kvm_run->mmio.len,
-			       vcpu_kvm_run->mmio.data[0]);
-			break;
 		case KVM_EXIT_INTERNAL_ERROR:
+			printf("Error!\n");
 			return -EIO;
 		case KVM_EXIT_SHUTDOWN:
 		case KVM_EXIT_HLT:
+			printf("Guest halted!\n");
 			return 0;
+		case KVM_EXIT_MMIO:
+			if (vcpu_kvm_run->mmio.phys_addr == CONSOLE_FIFO_ADDR
+				&& vcpu_kvm_run->mmio.is_write) {
+				/* Trap & Emulate console write */
+				putc(vcpu_kvm_run->mmio.data[0], stdout);
+				break;
+			}
+		/* fall through */
 		default:
+			printf("unhandled vmexit, reason: %s\n",
+			       kvm_exit_reasons[vcpu_kvm_run->exit_reason]);
 			break;
 		}
 	}
